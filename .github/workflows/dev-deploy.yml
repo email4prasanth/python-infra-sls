@@ -126,7 +126,7 @@ jobs:
           # Parse values
           DB_PASSWORD=$(jq -r '.password' secret.json)
           DB_NAME=$(jq -r '.dbname' secret.json)
-          DB_PORT=(jq -r '.port' secret.json)
+          DB_PORT=$(jq -r '.port' secret.json)
           DB_HOST=$(jq -r '.host' secret.json)
           DB_USER=$(jq -r '.username' secret.json)
 
