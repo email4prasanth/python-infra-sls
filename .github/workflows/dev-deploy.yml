@@ -216,24 +216,46 @@ jobs:
 
       - name: Install Serverless Framework
         run: npm install -g serverless@4.0.0
+
       - name: Retrieve Secrets from AWS Secrets Manager
         id: get-secrets
         run: |
           SECRET_NAME="testpy-dev-db-credentials"
+          echo "Retrieving secrets from: $SECRET_NAME"
+          SECRET_ARN=$(aws secretsmanager describe-secret --secret-id $SECRET_NAME --query ARN --output text)
+          echo "Secret ARN: $SECRET_ARN"
+          
+          # Retrieve secret value
           SECRET_VALUE=$(aws secretsmanager get-secret-value --secret-id $SECRET_NAME --query SecretString --output text)
+          echo "Raw secret value retrieved"
           echo "$SECRET_VALUE" > secret.json
-          DB_NAME=$(jq -r '.db_name' secret.json)
-          DB_USER=$(jq -r '.db_user' secret.json)
-          DB_PASSWORD=$(jq -r '.db_password' secret.json)
+          
+          # Parse values
+          DB_PASSWORD=$(jq -r '.password' secret.json)
+          DB_NAME=$(jq -r '.dbname' secret.json)
+          DB_PORT=$(jq -r '.port' secret.json)
           DB_HOST=$(jq -r '.host' secret.json)
+          DB_USER=$(jq -r '.username' secret.json)
 
-          echo "DB_NAME=$DB_NAME" >> $GITHUB_ENV
-          echo "DB_USER=$DB_USER" >> $GITHUB_ENV
+          # Log non-sensitive values
+          echo "DB_PASSWORD: $DB_PASSWORD"
+          echo "DB_NAME: $DB_NAME"
+          echo "DB_PORT: $DB_PORT"
+          echo "DB_HOST: $DB_HOST"
+          echo "DB_USER: $DB_USER"
+          
+          # Set environment variables
           echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
+          echo "DB_NAME=$DB_NAME" >> $GITHUB_ENV
+          echo "DB_PORT=$DB_PORT" >> $GITHUB_ENV
           echo "DB_HOST=$DB_HOST" >> $GITHUB_ENV
+          echo "DB_USER=$DB_USER" >> $GITHUB_ENV
 
-      # Create minimal env.yml needed for destruction
-      - name: Create destruction env.yml
+          
+          echo "JWT_SECRET=$JWT_SECRET" >> $GITHUB_ENV
+          echo "PG_ENCRYPT_SECRET=$PG_ENCRYPT_SECRET" >> $GITHUB_ENV
+
+      - name: Create env.yml
         run: |
           cat <<EOF > env.yml
           $ENVIRONMENT:
@@ -241,7 +263,7 @@ jobs:
             DB_NAME: ${{ env.DB_NAME }}
             DB_USER: ${{ env.DB_USER }}
             DB_PASSWORD: ${{ env.DB_PASSWORD }}
-            DB_PORT: 5432
+            DB_PORT: ${{ env.DB_PORT }}
             
             JWT_SECRET: ${{ secrets.JWT_SECRET }}
             PG_ENCRYPT_SECRET: ${{ secrets.PG_ENCRYPT_SECRET }}
@@ -249,6 +271,10 @@ jobs:
             FE_APP_URL: ${{ secrets.FE_APP_URL }}
             API_ROOT_PATH: ${API_ROOT_PATH}
           EOF
+          
+          # Show non-sensitive parts of env.yml
+          echo "env.yml contents (redacted):"
+          grep -v -E 'DB_PASSWORD|JWT_SECRET|PG_ENCRYPT_SECRET' env.yml
 
       - name: Destroy Serverless App
         run: |
