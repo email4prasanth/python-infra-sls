@@ -1,0 +1,98 @@
+{
+  "Straumann": {
+    "BLT": [2.9, 3.3, 4.1, 4.8],
+    "BLX/TLX": [3.5, 3.75, 4.0, 4.5, 5.0, 5.5, 6.5],
+    "BLC/TLC": [3.3, 3.75, 4.5, 5.5, 6.5],
+    "BL": [3.3, 4.1, 4.8],
+    "WNTE/WNSP": [4.8],
+    "Ceramic Monotype": [3.3, 4.1],
+    "Ceramic": [4.1],
+    "RidgeFit": [2.4],
+    "RNSP": [3.3, 4.1, 4.8]
+  },
+  "Nobel": {
+    "N1": [3.5, 4.0, 4.8],
+    "Active": [3.0, 3.5, 4.3, 5.0, 5.5],
+    "Parallel CC": [3.75, 4.3, 5.0, 5.5],
+    "Replace Select": [3.5, 4.3, 5.0, 6.0],
+    "Replace Select Straight": [3.5, 4.0],
+    "Speedy": [3.3, 4.0, 5.0]
+  },
+  "Zimvie": {
+    "T3 Pro PS/NPS": [3.25, 4.0, 5.0, 6.0],
+    "TSX": [3.1, 3.7, 4.1, 4.7, 5.4, 6.0],
+    "T3": [3.25, 3.75, 4.0, 5.0, 6.0],
+    "T3 Ext Hex": [3.25, 4.0, 5.0, 6.0],
+    "Tapered Screw Vent": [3.7, 4.1, 4.7, 6.0],
+    "Osseotite Certain": [3.25, 3.75, 4.0, 5.0, 6.0],
+    "Osseotite 2 ExtHex": [3.25, 3.75, 4.0, 5.0, 6.0],
+    "Prevail PS": [4.0, 5.0, 6.0],
+    "Trabecular Metal": [3.7, 4.1, 4.7, 6.0],
+    "Eztetic": [3.1]
+  },
+  "Hiossen": {
+    "EK": [3.2, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 7.0],
+    "ETIII": [3.2, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 7.0],
+    "ETIV": [4.0, 4.5, 5.0, 6.0, 7.0],
+    "SS III": [3.5, 4.0, 4.5, 5.0, 6.0, 7.0]
+  },
+  "Dentsply": {
+    "AstraTech Osseospeed": [3.0, 3.5, 4.0, 4.5, 5.0],
+    "PrimeTaperEV": [3.0, 3.6, 4.2, 4.8, 5.4],
+    "OmniTaper EV": [3.0, 3.4, 3.8, 4.5, 5.5],
+    "AstraTechEV": [3.0, 3.6, 4.2, 4.8, 5.4],
+    "Ankylos": [3.5, 4.5, 5.5, 7.0],
+    "MIS 4": [3.3, 3.75, 4.2, 5.0, 6.0],
+    "MisC1 XD": [3.3, 3.75, 4.2, 5.0],
+    "MIS V3": [3.3, 3.9, 4.3, 5.0],
+    "MIS 7": [3.3, 3.75, 4.2, 5.0, 6.0]
+  },
+  "Megagen": {
+    "AnyRidge": [3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0],
+    "AnyOne": [3.5, 4.0, 4.5, 5.0, 6.0, 7.0],
+    "BlueDiamond": [3.3, 3.7, 4.1, 4.4, 4.8],
+    "Mini": [3.0, 3.25],
+    "Advanced Intermezzo": [2.0, 2.5],
+    "Mini Over": [2.5]
+  },
+  "Implant Direct": {
+    "SimplyIconic": [3.2, 3.7, 4.2, 4.7, 5.2, 5.7],
+    "Interactive": [3.2, 3.7, 4.3, 5.0],
+    "Legacy": [3.2, 3.7, 4.2, 4.7, 5.2, 5.7, 7.0],
+    "TriLobe Replant": [3.5, 4.3, 5.0, 6.0],
+    "TrLobe Reactive": [3.7, 4.2, 4.7, 5.7],
+    "Swish Active": [3.3, 4.1, 4.8],
+    "ScrewPlant": [3.7, 4.7, 5.7],
+    "GoDirect": [3.0, 3.7, 4.7],
+    "Simply Replant": [3.5, 4.3, 5.0, 6.0],
+    "Swish Plus": [3.3, 4.1, 4.8],
+    "Screw Indirect": [3.0, 3.7, 4.7, 5.7]
+  },
+  "BioHorizon": {
+    "Tapered Pro Conical": [3.3, 3.8, 4.2, 4.6, 5.2],
+    "Tapered Pro": [3.8, 4.2, 4.6, 5.2],
+    "Tapered Immed Molar": [7.0, 8.0],
+    "Tapered Internal": [3.0, 3.4, 3.8, 4.6, 5.8],
+    "Tapered 3.0": [3.0],
+    "Tapered Plus": [3.8, 4.6, 5.8],
+    "Tapered Short": [4.6, 5.8],
+    "Tapered PTG": [4.2],
+    "Tapered Tiss Level": [3.0, 3.8, 4.6, 5.8],
+    "CONELOG Progressive": [3.3, 3.8, 4.3, 5.0]
+  },
+  "Keystone": {
+    "Genesis": [3.5, 3.8, 4.5, 5.5, 6.5],
+    "Prima Connex": [3.5, 4.1, 5.0],
+    "Prima Plus": [3.5, 4.1, 5.0, 6.0],
+    "Paltop Adv Classic": [3.25, 3.75, 4.2, 5.0],
+    "Paltop Adv Plus": [3.25, 3.75, 4.2, 5.0, 6.0],
+    "Paltop Dynamic": [3.25, 3.75, 4.2, 5.0, 6.0],
+    "Paltop Dyn Conical": [3.25, 3.75, 4.2, 5.0],
+    "Paltop Dyn Conical MC": [3.25, 3.75, 4.2, 5.0],
+    "Paltop Active": [3.25, 3.75, 4.2, 5.0, 6.0],
+    "Paltop Conical Active": [3.25, 3.75, 4.2, 5.0],
+    "Molaris Tilobe": [7.0, 8.0, 9.0],
+    "Molaris Int Hex": [7.0, 8.0, 9.0],
+    "Zeramex XT": [3.5, 4.2, 5.5]
+  }
+}
