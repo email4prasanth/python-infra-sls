@@ -256,6 +256,7 @@ jobs:
           sls remove --stage $ENVIRONMENT
 
   aws-infra-destroy:
+    needs: destroy-serverless
     runs-on: ubuntu-latest
     defaults:
       run:
