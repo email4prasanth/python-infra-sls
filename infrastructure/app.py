@@ -41,9 +41,10 @@ rds_stack = RDSStack(
     app,
     f"RDSStack-{env_name}",
     environment=env_name,
-    vpc=vpc_stack.vpc,  # Pass the actual VPC object, not the stack
-    public_subnets=vpc_stack.public_subnets,  # Add this parameter
+    vpc=vpc_stack.vpc,  
+    public_subnets=vpc_stack.public_subnets,
     web_security_group=sg_stack.web_sg,
+    rds_security_group=sg_stack.rds_sg,
     db_secret=secrets_stack.db_secret,
     env=cdk.Environment(account='180294218712', region='us-east-1')
 )

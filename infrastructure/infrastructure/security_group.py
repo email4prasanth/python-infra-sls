@@ -63,12 +63,47 @@ class SecurityGroupStack(Stack):
                     "ipProtocol": "tcp",
                     "fromPort": 22,
                     "toPort": 22,
-                    "cidrIp": config.SSH_ALLOWED_CIDR,
+                    "cidrIp": "0.0.0.0/0",
                     "description": "Allow SSH"
                 }
             ])
         
         self.web_sg.security_group_ingress = ingress_rules
+
+         # Create RDS Security Group
+        self.rds_sg = ec2.CfnSecurityGroup(
+            self,
+            f"{prefix}-RDSSG",
+            group_description=f"{prefix} RDS Security Group",
+            vpc_id=vpc_id,
+            security_group_egress=[{
+                "ipProtocol": "-1",
+                "cidrIp": "0.0.0.0/0",
+                "description": "Allow all outbound traffic"
+            }],
+            tags=[{"key": "Name", "value": f"{prefix}-RDSSG"}]
+        )
         
-        # Output security group ID
+        # Add ingress rules for rds_sg
+        rds_ingress_rules = []
+        if environment == "dev":
+            # Allow all traffic in dev
+            rds_ingress_rules.append({
+                "ipProtocol": "-1",
+                "cidrIp": "0.0.0.0/0",
+                "description": "Allow all traffic in dev"
+            })
+        else:
+            # Restrict to PostgreSQL port in prod
+            rds_ingress_rules.append({
+                "ipProtocol": "tcp",
+                "fromPort": 5432,
+                "toPort": 5432,
+                "cidrIp": config.WEB_SERVER_CIDR,  # Allow only from web servers
+                "description": "Allow PostgreSQL"
+            })
+        self.rds_sg.security_group_ingress = rds_ingress_rules
+        
+        # Output security group IDs
         CfnOutput(self, "WebSecurityGroupId", value=self.web_sg.attr_group_id)
+        CfnOutput(self, "RDSSecurityGroupId", value=self.rds_sg.attr_group_id)

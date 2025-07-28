@@ -40,6 +40,7 @@ class RDSStack(Stack):
                  vpc: ec2.CfnVPC,
                  public_subnets: List[ec2.CfnSubnet],
                  web_security_group: ec2.CfnSecurityGroup,
+                 rds_security_group: ec2.CfnSecurityGroup,
                  db_secret,  # Secret passed from SecretsStack
                  **kwargs):
         super().__init__(scope, construct_id, **kwargs)
@@ -84,7 +85,7 @@ class RDSStack(Stack):
                 db_secret.secret_arn,
                 json_field="password"
             ).to_string(),
-            vpc_security_groups=[rds_sg.attr_group_id],
+            vpc_security_groups=[rds_security_group.attr_group_id], 
             db_subnet_group_name=self.create_subnet_group(public_subnets, prefix),
             publicly_accessible=config.RDS_PUBLICLY_ACCESSIBLE,
             backup_retention_period=config.RDS_BACKUP_RETENTION

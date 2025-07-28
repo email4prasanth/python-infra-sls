@@ -12,9 +12,10 @@
         │   ├── dev.py
         │   └── prod.py
         ├── __init__.py
+        └── rds_stack.py
+        └── security_stack.py
         └── security_group.py
         └── vpc_stack.py
-        └── rds_stack.py
     └── .tests/
     ├── app.py
     ├── cdk.json
