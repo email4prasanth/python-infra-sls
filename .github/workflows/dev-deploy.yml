@@ -1,0 +1,124 @@
+name : Deploy AWS infrastructure using AWS CDK with the Python SDK
+on:
+  push:
+    branches:
+      - develop-cicd
+
+jobs:
+  aws-infrastructure:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infrastructure
+    env:
+      ENVIRONMENT: dev
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.12
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 22
+
+      - name: Instal AWS CDK
+        run: npm install -g aws-cdk
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Install Python dependencies
+        # working-directory: infrastructure
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+ 
+      - name: Bootstrap CDK
+        run: cdk bootstrap aws://180294218712/us-east-1
+
+
+      - name: CDK Synth
+        # working-directory: infrastructure
+        run: cdk synth --context env=${{ env.ENVIRONMENT }}
+
+      - name: CDK Deploy
+        # working-directory: infrastructure
+        run: cdk deploy --all --context env=${{ env.ENVIRONMENT }} --require-approval never
+
+# ########################################################
+# ### Destroy AWS CDK with the Python SDK
+# ########################################################
+
+# name : Destroy AWS infrastructure using AWS CDK with the Python SDK
+# on:
+#   push:
+#     branches:
+#       - develop-cicd
+
+# jobs:
+#   aws-infrastructure:
+#     runs-on: ubuntu-latest
+#     defaults:
+#       run:
+#         working-directory: infrastructure
+#     env:
+#       ENVIRONMENT: dev
+#     steps:
+#       - name: Checkout Repository
+#         uses: actions/checkout@v4
+
+#       - name: Set up Python
+#         uses: actions/setup-python@v4
+#         with:
+#           python-version: 3.12
+
+#       - name: Set up Node.js
+#         uses: actions/setup-node@v3
+#         with:
+#           node-version: 22
+
+#       - name: Instal AWS CDK
+#         run: npm install -g aws-cdk
+
+#       - name: Configure AWS Credentials
+#         uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+#       - name: Install Python dependencies
+#         run: |
+#           python -m pip install --upgrade pip
+#           pip install -r requirements.txt
+
+#       - name: CDK Destroy Infrastructure
+#         run: |
+#           cdk destroy --all --force --context env=${{ env.ENVIRONMENT }}
+#           echo "Infrastructure destroyed successfully"
+
+#       - name: Destroy CDK Bootstrap Stack
+#         run: |
+#           # Check if stack exists
+#           if aws cloudformation describe-stacks --stack-name CDKToolkit &>/dev/null; then
+#             echo "Destroying CDK bootstrap stack"
+#             aws cloudformation delete-stack --stack-name CDKToolkit
+#             aws cloudformation wait stack-delete-complete --stack-name CDKToolkit
+#           else
+#             echo "CDK bootstrap stack not found"
+#           fi
+
+#       - name: Remove S3 bucket
+#         run: |
+#           cd ..
+#           ls -al
+#           bash ./z-del-s3.sh
