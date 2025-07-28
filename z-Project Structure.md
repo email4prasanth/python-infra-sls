@@ -1,10 +1,12 @@
+└── .github\workflows
+    └── dev-deploy.yml
 └── backendservice/
     └── src/
-    ├──package.json
+    ├── package.json
     ├── serverless.yml
-    ├──
-    ├──
-    ├──
+    ├── *.mjs
+    ├── nodemon.json
+    ├── *.js
 └── infrastructure/
     └── infrastructure/
         ├── config/
