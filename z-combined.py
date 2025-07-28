@@ -6,7 +6,8 @@ import aws_cdk as cdk
 
 from infrastructure.vpc_stack import VPCStack
 from infrastructure.security_group import SecurityGroupStack
-from infrastructure.compute_stack import ComputeStack
+from infrastructure.rds_stack import RDSStack 
+from infrastructure.secrets_stack import SecretsStack
 
 
 app = cdk.App()
@@ -28,14 +29,264 @@ sg_stack = SecurityGroupStack(
     env=cdk.Environment(account='180294218712', region='us-east-1')
 )
 
+# Create Secrets stack
+secrets_stack = SecretsStack(
+    app, 
+    f"SecretsStack-{env_name}",
+    environment=env_name,
+    env=cdk.Environment(account='180294218712', region='us-east-1')
+)
+
+# Create RDS stack
+rds_stack = RDSStack(
+    app,
+    f"RDSStack-{env_name}",
+    environment=env_name,
+    vpc=vpc_stack.vpc,  # Pass the actual VPC object, not the stack
+    public_subnets=vpc_stack.public_subnets,  # Add this parameter
+    web_security_group=sg_stack.web_sg,
+    db_secret=secrets_stack.db_secret,
+    env=cdk.Environment(account='180294218712', region='us-east-1')
+)
+
 # security groups depend on VPC
 sg_stack.add_dependency(vpc_stack)
+# RDS depends on Security Group
+rds_stack.add_dependency(sg_stack)
+rds_stack.add_dependency(secrets_stack)
 
 app.synth()
 
 
 
 # ------ File: infrastructure\infrastructure\__init__.py ------
+
+
+
+# ------ File: infrastructure\infrastructure\rds_stack.py ------
+from aws_cdk import (
+    Stack,
+    aws_ec2 as ec2,
+    aws_rds as rds,
+    aws_lambda as lambda_,
+    custom_resources as cr,
+    aws_iam as iam,
+    CfnOutput,
+    SecretValue,
+    Duration
+)
+from constructs import Construct
+import importlib
+from types import SimpleNamespace
+import json
+from typing import List
+
+class RDSStack(Stack):
+    def load_config(self, env: str):
+        try:
+            module = importlib.import_module(f"infrastructure.config.{env}")
+            return SimpleNamespace(**vars(module))
+        except ModuleNotFoundError:
+            raise ValueError(f"Configuration for {env} not found")
+        
+    def create_subnet_group(self, public_subnets: List[ec2.CfnSubnet], prefix: str) -> str:
+        subnet_group = rds.CfnDBSubnetGroup(
+            self,
+            f"{prefix}-SubnetGroup",
+            db_subnet_group_description=f"Subnet group for {prefix} RDS",
+            subnet_ids=[subnet.ref for subnet in public_subnets],
+            db_subnet_group_name=f"{prefix}-rds-subnet-group"
+        )
+        return subnet_group.ref
+
+    def __init__(self, 
+                 scope: Construct, 
+                 construct_id: str, 
+                 environment: str, 
+                 vpc: ec2.CfnVPC,
+                 public_subnets: List[ec2.CfnSubnet],
+                 web_security_group: ec2.CfnSecurityGroup,
+                 db_secret,  # Secret passed from SecretsStack
+                 **kwargs):
+        super().__init__(scope, construct_id, **kwargs)
+        config = self.load_config(environment)
+        prefix = f"testpy-{environment}"
+
+        # Create valid database name
+        db_name = f"db{environment}".replace("-", "").replace("_", "")
+        if not db_name[0].isalpha():
+            db_name = f"a{db_name}"
+
+        # Create RDS Security Group
+        rds_sg = ec2.CfnSecurityGroup(
+            self,
+            f"{prefix}-RDSSG",
+            group_description=f"{prefix} RDS Security Group",
+            vpc_id=vpc.ref,
+            security_group_ingress=[
+                {
+                    "ipProtocol": "tcp",
+                    "fromPort": config.RDS_PORT,
+                    "toPort": config.RDS_PORT,
+                    "sourceSecurityGroupId": web_security_group.attr_group_id,
+                    "description": "Allow from web servers"
+                }
+            ],
+            tags=[{"key": "Name", "value": f"{prefix}-RDSSG"}]
+        )
+        
+        # Create PostgreSQL instance
+        db_instance = rds.CfnDBInstance(
+            self,
+            f"{prefix}-PostgreSQL",
+            engine="postgres",
+            engine_version=config.RDS_ENGINE_VERSION,
+            db_instance_class=config.RDS_INSTANCE_TYPE,
+            allocated_storage=config.RDS_ALLOCATED_STORAGE,
+            storage_type=config.RDS_STORAGE_TYPE,
+            db_name=db_name,
+            master_username=config.RDS_MASTER_USERNAME,
+            master_user_password=SecretValue.secrets_manager(
+                db_secret.secret_arn,
+                json_field="password"
+            ).to_string(),
+            vpc_security_groups=[rds_sg.attr_group_id],
+            db_subnet_group_name=self.create_subnet_group(public_subnets, prefix),
+            publicly_accessible=config.RDS_PUBLICLY_ACCESSIBLE,
+            backup_retention_period=config.RDS_BACKUP_RETENTION
+        )
+
+        # Create Lambda function to update secret
+        update_secret_lambda = lambda_.Function(
+            self,
+            "UpdateSecretLambda",
+            runtime=lambda_.Runtime.PYTHON_3_9,
+            handler="index.handler",
+            code=lambda_.Code.from_inline("""
+import boto3
+import os
+import json
+
+def handler(event, context):
+    secret_arn = os.environ['SECRET_ARN']
+    endpoint = os.environ['DB_ENDPOINT']
+    port = os.environ['DB_PORT']
+    
+    client = boto3.client('secretsmanager')
+    
+    # Get current secret value
+    current = client.get_secret_value(SecretId=secret_arn)
+    secret_value = json.loads(current['SecretString'])
+    
+    # Update with new values
+    secret_value['host'] = endpoint
+    secret_value['port'] = port
+    
+    # Save updated secret
+    response = client.put_secret_value(
+        SecretId=secret_arn,
+        SecretString=json.dumps(secret_value)
+    )
+    
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Secret updated successfully!')
+    }
+            """),
+            environment={
+                "SECRET_ARN": db_secret.secret_arn,
+                "DB_ENDPOINT": db_instance.attr_endpoint_address,
+                "DB_PORT": str(db_instance.attr_endpoint_port)
+            },
+            timeout=Duration.seconds(30)
+        )
+        
+        # Grant Lambda permission to update the secret
+        db_secret.grant_read(update_secret_lambda)
+        db_secret.grant_write(update_secret_lambda)
+        
+        # Create custom resource to trigger Lambda after RDS creation
+        trigger = cr.AwsCustomResource(
+            self,
+            "UpdateSecretTrigger",
+            policy=cr.AwsCustomResourcePolicy.from_statements([
+                iam.PolicyStatement(
+                    actions=["lambda:InvokeFunction"],
+                    resources=[update_secret_lambda.function_arn]
+                )
+            ]),
+            on_create=cr.AwsSdkCall(
+                service="Lambda",
+                action="invoke",
+                parameters={
+                    "FunctionName": update_secret_lambda.function_name,
+                    "InvocationType": "Event"
+                },
+                # physical_resource_id=cr.PhysicalResourceId.of("UpdateSecretTrigger")
+                physical_resource_id=cr.PhysicalResourceId.of(f"UpdateSecretTrigger-{environment}-{construct_id}"
+            )
+        )
+        )
+        trigger.node.add_dependency(db_instance)
+
+        # Output connection information
+        CfnOutput(self, "RDSInstanceEndpoint", value=db_instance.attr_endpoint_address)
+        CfnOutput(self, "RDSInstancePort", value=str(db_instance.attr_endpoint_port))
+
+
+
+# ------ File: infrastructure\infrastructure\secrets_stack.py ------
+# ------ File: infrastructure/infrastructure/secrets_stack.py ------
+from aws_cdk import (
+    Stack,
+    aws_secretsmanager as secretsmanager,
+    CfnOutput
+)
+from constructs import Construct
+import importlib
+from types import SimpleNamespace
+import json
+
+class SecretsStack(Stack):
+    def load_config(self, env: str):
+        try:
+            module = importlib.import_module(f"infrastructure.config.{env}")
+            return SimpleNamespace(**vars(module))
+        except ModuleNotFoundError:
+            raise ValueError(f"Configuration for {env} not found")
+
+    def __init__(self, scope: Construct, construct_id: str, environment: str, **kwargs):
+        super().__init__(scope, construct_id, **kwargs)
+        config = self.load_config(environment)
+        prefix = f"testpy-{environment}"
+
+        # Create valid database name
+        db_name = f"db{environment}".replace("-", "").replace("_", "")
+        if not db_name[0].isalpha():
+            db_name = f"a{db_name}"
+
+        # Create database secret with all required fields
+        self.db_secret = secretsmanager.Secret(
+            self,
+            f"{prefix}-DBSecret",
+            secret_name=f"{prefix}-db-credentials",
+            generate_secret_string=secretsmanager.SecretStringGenerator(
+                secret_string_template=json.dumps({
+                    "username": config.RDS_MASTER_USERNAME,
+                    "dbname": db_name,
+                    "maintenanceDb": "postgres",  # Default maintenance database
+                    "host": "TEMP-PLACEHOLDER",   # Will be updated later
+                    "port": "5432"                # Will be updated later
+                }),
+                generate_string_key="password",
+                exclude_characters='/@" \\',
+                password_length=16
+            )
+        )
+
+        # Output secret ARN
+        CfnOutput(self, "DBSecretArn", value=self.db_secret.secret_arn)
+        CfnOutput(self, "DBSecretName", value=self.db_secret.secret_name)
 
 
 
@@ -145,6 +396,8 @@ class VPCStack(Stack):
             self,
             "Vpc",
             cidr_block=config.VPC_CIDR,
+            enable_dns_support=True,  # Required for RDS public access
+            enable_dns_hostnames=True,  # Required for RDS public access
             tags=[{"key": "Name", "value": f"{prefix}-vpc"}]
         )
         
@@ -230,10 +483,20 @@ VPC_CIDR = "10.0.0.0/16"
 PUBLIC_SUBNET_CIDRS = ["10.0.1.0/24", "10.0.2.0/24"]
 AVAILABILITY_ZONES = ["us-east-1a", "us-east-1b"]
 PROFILE_NAME = "tut"
+## EC2 Server
 INSTANCE_TYPE = "t2.micro"
 KEY_NAME = "DevOpsKey"
 SERVER1_AMI = "ami-020cba7c55df1f615"  # Ubuntu Server 24.04 LTS
 SERVER2_AMI = "ami-050fd9796aa387c0d"  # Amazon Linux 2023
+## POSTGRES
+RDS_INSTANCE_TYPE = "db.t3.micro"
+RDS_MASTER_USERNAME = "pydbadmin"
+RDS_ENGINE_VERSION = "17.5"
+RDS_PORT = "0.0.0.0/0"
+RDS_PUBLICLY_ACCESSIBLE = True
+RDS_ALLOCATED_STORAGE = "20"
+RDS_STORAGE_TYPE = "gp2"
+RDS_BACKUP_RETENTION = 0  # Days (0 disables backups)
 
 
 
@@ -244,10 +507,20 @@ VPC_CIDR = "10.1.0.0/16"
 PUBLIC_SUBNET_CIDRS = ["10.1.1.0/24", "10.1.2.0/24"]
 AVAILABILITY_ZONES = ["us-east-1a", "us-east-1b"]
 PROFILE_NAME = "tut"
+## EC2 Server
 INSTANCE_TYPE = "t2.micro"
 KEY_NAME = "DevOpsKey"
 SERVER1_AMI = "ami-020cba7c55df1f615"  # Ubuntu Server 24.04 LTS
 SERVER2_AMI = "ami-050fd9796aa387c0d"  # Amazon Linux 2023
+## POSTGRES
+RDS_INSTANCE_TYPE = "db.t3.micro"
+RDS_MASTER_USERNAME = "pydbadmin"
+RDS_ENGINE_VERSION = "17.5"
+RDS_PORT = 5432
+RDS_PUBLICLY_ACCESSIBLE = False
+RDS_ALLOCATED_STORAGE = "100"
+RDS_STORAGE_TYPE = "gp3"
+RDS_BACKUP_RETENTION = 7  # Days (0 disables backups)
 
 
 

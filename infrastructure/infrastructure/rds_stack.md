@@ -1,13 +1,13 @@
+# ------ File: infrastructure/infrastructure/rds_stack.py ------
 from aws_cdk import (
     Stack,
     aws_ec2 as ec2,
     aws_rds as rds,
-    aws_lambda as lambda_,
     custom_resources as cr,
     aws_iam as iam,
     CfnOutput,
     SecretValue,
-    Duration
+    Fn
 )
 from constructs import Construct
 import importlib
@@ -90,77 +90,44 @@ class RDSStack(Stack):
             backup_retention_period=config.RDS_BACKUP_RETENTION
         )
 
-        # Create Lambda function to update secret
-        update_secret_lambda = lambda_.Function(
-            self,
-            "UpdateSecretLambda",
-            runtime=lambda_.Runtime.PYTHON_3_9,
-            handler="index.handler",
-            code=lambda_.Code.from_inline("""
-import boto3
-import os
-import json
-
-def handler(event, context):
-    secret_arn = os.environ['SECRET_ARN']
-    endpoint = os.environ['DB_ENDPOINT']
-    port = os.environ['DB_PORT']
-    
-    client = boto3.client('secretsmanager')
-    
-    # Get current secret value
-    current = client.get_secret_value(SecretId=secret_arn)
-    secret_value = json.loads(current['SecretString'])
-    
-    # Update with new values
-    secret_value['host'] = endpoint
-    secret_value['port'] = port
-    
-    # Save updated secret
-    response = client.put_secret_value(
-        SecretId=secret_arn,
-        SecretString=json.dumps(secret_value)
-    )
-    
-    return {
-        'statusCode': 200,
-        'body': json.dumps('Secret updated successfully!')
-    }
-            """),
-            environment={
-                "SECRET_ARN": db_secret.secret_arn,
-                "DB_ENDPOINT": db_instance.attr_endpoint_address,
-                "DB_PORT": str(db_instance.attr_endpoint_port)
-            },
-            timeout=Duration.seconds(30)
+        # Construct the secret string using CloudFormation functions
+        secret_string = Fn.sub(
+            json.dumps({
+                "username": config.RDS_MASTER_USERNAME,
+                "password": "${password}",
+                "dbname": db_name,
+                "maintenanceDb": "postgres",
+                "host": "${host}",
+                "port": "${port}"
+            }),
+            {
+                "password": db_secret.secret_value_from_json("password").to_string(),
+                "host": db_instance.attr_endpoint_address,
+                "port": db_instance.attr_endpoint_port
+            }
         )
-        
-        # Grant Lambda permission to update the secret
-        db_secret.grant_read(update_secret_lambda)
-        db_secret.grant_write(update_secret_lambda)
-        
-        # Create custom resource to trigger Lambda after RDS creation
-        trigger = cr.AwsCustomResource(
+
+        # Create custom resource to update secret
+        update_secret_cr = cr.AwsCustomResource(
             self,
-            "UpdateSecretTrigger",
+            "UpdateSecretResource",
             policy=cr.AwsCustomResourcePolicy.from_statements([
                 iam.PolicyStatement(
-                    actions=["lambda:InvokeFunction"],
-                    resources=[update_secret_lambda.function_arn]
+                    actions=["secretsmanager:PutSecretValue"],
+                    resources=[db_secret.secret_arn]
                 )
             ]),
             on_create=cr.AwsSdkCall(
-                service="Lambda",
-                action="invoke",
+                service="SecretsManager",
+                action="putSecretValue",
                 parameters={
-                    "FunctionName": update_secret_lambda.function_name,
-                    "InvocationType": "Event"
+                    "SecretId": db_secret.secret_arn,
+                    "SecretString": secret_string
                 },
-                # physical_resource_id=cr.PhysicalResourceId.of("UpdateSecretTrigger")
-                physical_resource_id=cr.PhysicalResourceId.of(f"UpdateSecretTrigger-{environment}-{construct_id}"
+                physical_resource_id=cr.PhysicalResourceId.of("SecretUpdate")
             )
         )
-        trigger.node.add_dependency(db_instance)
+        update_secret_cr.node.add_dependency(db_instance)
 
         # Output connection information
         CfnOutput(self, "RDSInstanceEndpoint", value=db_instance.attr_endpoint_address)

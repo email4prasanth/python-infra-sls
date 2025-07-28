@@ -6,6 +6,7 @@ import aws_cdk as cdk
 from infrastructure.vpc_stack import VPCStack
 from infrastructure.security_group import SecurityGroupStack
 from infrastructure.rds_stack import RDSStack 
+from infrastructure.secrets_stack import SecretsStack
 
 
 app = cdk.App()
@@ -27,6 +28,14 @@ sg_stack = SecurityGroupStack(
     env=cdk.Environment(account='180294218712', region='us-east-1')
 )
 
+# Create Secrets stack
+secrets_stack = SecretsStack(
+    app, 
+    f"SecretsStack-{env_name}",
+    environment=env_name,
+    env=cdk.Environment(account='180294218712', region='us-east-1')
+)
+
 # Create RDS stack
 rds_stack = RDSStack(
     app,
@@ -35,6 +44,7 @@ rds_stack = RDSStack(
     vpc=vpc_stack.vpc,  # Pass the actual VPC object, not the stack
     public_subnets=vpc_stack.public_subnets,  # Add this parameter
     web_security_group=sg_stack.web_sg,
+    db_secret=secrets_stack.db_secret,
     env=cdk.Environment(account='180294218712', region='us-east-1')
 )
 
@@ -42,5 +52,6 @@ rds_stack = RDSStack(
 sg_stack.add_dependency(vpc_stack)
 # RDS depends on Security Group
 rds_stack.add_dependency(sg_stack)
+rds_stack.add_dependency(secrets_stack)
 
 app.synth()

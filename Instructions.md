@@ -86,6 +86,7 @@ aws s3 ls --profile tut --region us-east-1
 - Powershell realated files should be replaced with bash code.
 - specify the environment
 - Create infra
+- To update secrets without using Lambda by using the **AWS Custom Resource** directly with the Secrets Manager SDK call
 ```sh
 name: Set up Python
 name: Set up Node.js
