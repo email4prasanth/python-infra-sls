@@ -1,7 +1,7 @@
 // DB connection logics goes here
 import dotenv from 'dotenv';
 import { Sequelize } from 'sequelize';
-dotenv.config(); // Load environment variables from .env file
+dotenv.config(); // Load environment variables from .env files
 
 export const sequelize = new Sequelize(
   process.env.DB_NAME as string,
@@ -12,6 +12,13 @@ export const sequelize = new Sequelize(
     dialect: 'postgres',
     port: parseInt(process.env.DB_PORT as string),
     logging: false,
+    // Add SSL configuration
+    dialectOptions: {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false,
+      },
+    },
   }
 );
 
@@ -21,5 +28,6 @@ export const initDB = async () => {
     console.log('DB connection has been established successfully.');
   } catch (error) {
     console.error('Unable to connect to the DB:', error);
+    throw error; // Rethrow to propagate the error
   }
 };
