@@ -148,7 +148,8 @@ jobs:
           
           echo "JWT_SECRET=$JWT_SECRET" >> $GITHUB_ENV
           echo "PG_ENCRYPT_SECRET=$PG_ENCRYPT_SECRET" >> $GITHUB_ENV
-      - name: Retrive IDs from Subnet and Security Group
+          
+      - name: Retrieve IDs from Subnet and Security Group  # Fixed step name
         run: | 
           LAMBDA_SG_NAME=testpy-${ENVIRONMENT}-sg
           echo "Retrieving SG ID for: $LAMBDA_SG_NAME"
@@ -156,17 +157,17 @@ jobs:
             --filters Name=group-name,Values=$LAMBDA_SG_NAME \
             --query "SecurityGroups[0].GroupId" \
             --output text)
-          echo "Lambda sg: LAMBDA_SG_ID"
-          echo "LAMBDA_SG_ID" >> $GITHUB_ENV
+          echo "Lambda SG ID: $LAMBDA_SG_ID"
+          echo "LAMBDA_SG_ID=$LAMBDA_SG_ID" >> $GITHUB_ENV  # Corrected env setting
 
           SUBNET_TAG_NAME=testpy-${ENVIRONMENT}-vpc
-          echo "Retrieving secrets from: $SUBNET_TAG_NAME"
+          echo "Retrieving Subnets for: $SUBNET_TAG_NAME"
           SUBNET_IDS=$(aws ec2 describe-subnets \
             --filters "Name=tag:Name,Values=$SUBNET_TAG_NAME" \
             --query "Subnets[*].SubnetId" \
-            --output text
-          echo "Subnet IDs: SUBNET_IDS"
-          echo "SUBNET_IDS" >> $GITHUB_ENV
+            --output text | tr '\n' ',' | sed 's/,$//')  # Convert to comma-separated
+          echo "Subnet IDs: $SUBNET_IDS"
+          echo "SUBNET_IDS=$SUBNET_IDS" >> $GITHUB_ENV  # Corrected env setting
 
       - name: Create env.yml
         run: |
