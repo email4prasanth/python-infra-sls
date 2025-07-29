@@ -159,7 +159,7 @@ jobs:
 
           SUBNET_TAG_NAME=testpy-${ENVIRONMENT}-*
           echo "Retrieving Subnets for: $SUBNET_TAG_NAME"
-          SUBNET_IDS=$(aws ec2 describe-subnets  --filters "Name=tag:Name,Values=$SUBNET_TAG_NAME" --query "Subnets[*].SubnetId" --output text  --profile tut  --region us-east-1 | tr '\t' ',' )
+          SUBNET_IDS=$(aws ec2 describe-subnets  --filters "Name=tag:Name,Values=$SUBNET_TAG_NAME" --query "Subnets[*].SubnetId" --output text | tr '\t' ',' )
           echo "Subnet IDs: $SUBNET_IDS"
           echo "SUBNET_IDS=$SUBNET_IDS" >> $GITHUB_ENV  # Corrected env setting
 
