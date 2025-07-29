@@ -148,7 +148,7 @@ jobs:
           
           echo "JWT_SECRET=$JWT_SECRET" >> $GITHUB_ENV
           echo "PG_ENCRYPT_SECRET=$PG_ENCRYPT_SECRET" >> $GITHUB_ENV
-          
+
       - name: Retrieve IDs from Subnet and Security Group  # Fixed step name
         run: | 
           LAMBDA_SG_NAME=testpy-${ENVIRONMENT}-sg
@@ -244,7 +244,7 @@ jobs:
 #       - name: Retrieve Secrets from AWS Secrets Manager
 #         id: get-secrets
 #         run: |
-#           SECRET_NAME="testpy-dev-db-credentials"
+#           SECRET_NAME="testpy-${ENVIRONMENT}-db-credentials"
 #           echo "Retrieving secrets from: $SECRET_NAME"
 #           SECRET_ARN=$(aws secretsmanager describe-secret --secret-id $SECRET_NAME --query ARN --output text)
 #           echo "Secret ARN: $SECRET_ARN"
@@ -278,6 +278,26 @@ jobs:
           
 #           echo "JWT_SECRET=$JWT_SECRET" >> $GITHUB_ENV
 #           echo "PG_ENCRYPT_SECRET=$PG_ENCRYPT_SECRET" >> $GITHUB_ENV
+          
+#       - name: Retrieve IDs from Subnet and Security Group  # Fixed step name
+#         run: | 
+#           LAMBDA_SG_NAME=testpy-${ENVIRONMENT}-sg
+#           echo "Retrieving SG ID for: $LAMBDA_SG_NAME"
+#           LAMBDA_SG_ID=$(aws ec2 describe-security-groups \
+#             --filters Name=group-name,Values=$LAMBDA_SG_NAME \
+#             --query "SecurityGroups[0].GroupId" \
+#             --output text)
+#           echo "Lambda SG ID: $LAMBDA_SG_ID"
+#           echo "LAMBDA_SG_ID=$LAMBDA_SG_ID" >> $GITHUB_ENV  # Corrected env setting
+
+#           SUBNET_TAG_NAME=testpy-${ENVIRONMENT}-vpc
+#           echo "Retrieving Subnets for: $SUBNET_TAG_NAME"
+#           SUBNET_IDS=$(aws ec2 describe-subnets \
+#             --filters "Name=tag:Name,Values=$SUBNET_TAG_NAME" \
+#             --query "Subnets[*].SubnetId" \
+#             --output text | tr '\n' ',' | sed 's/,$//')  # Convert to comma-separated
+#           echo "Subnet IDs: $SUBNET_IDS"
+#           echo "SUBNET_IDS=$SUBNET_IDS" >> $GITHUB_ENV  # Corrected env setting
 
 #       - name: Create env.yml
 #         run: |
@@ -294,6 +314,9 @@ jobs:
 #             AWS_SES_SENDER_EMAIL: ${{ secrets.AWS_SES_SENDER_EMAIL }}
 #             FE_APP_URL: ${{ secrets.FE_APP_URL }}
 #             API_ROOT_PATH: ${API_ROOT_PATH}
+
+#             LAMBDA_SG_ID: $LAMBDA_SG_ID
+#             SUBNET_IDS: $SUBNET_IDS
 #           EOF
           
 #           # Show non-sensitive parts of env.yml

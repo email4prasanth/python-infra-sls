@@ -1,11 +1,11 @@
-service: lumifi-sls
+service: lumifi-lam
 
 frameworkVersion: '>=4.0.0'
 
 custom:
   serverless-offline:
     httpPort: 3001
-#   dev: ${file(./env.yml):dev}
+  #   dev: ${file(./env.yml):dev}
   env: ${file(./env.yml):${opt:stage, self:provider.stage, 'dev'}}
 
 provider:
@@ -13,14 +13,20 @@ provider:
   runtime: nodejs18.x
   region: us-east-1
   stage: ${opt:stage, 'dev'}
-  timeout: 29 # Max 900 seconds (15 minutes)
+  timeout: 30 # Max 900 seconds (15 minutes)
   # Explicitly configure regional API endpoint
   endpointType: REGIONAL
   httpApi:
-    shouldStartNameWithService: true 
+    shouldStartNameWithService: true
     accessLogs:
       format: '{"requestTime":"$context.requestTime","requestId":"$context.requestId","httpMethod":"$context.httpMethod","path":"$context.path","routeKey":"$context.routeKey","status":"$context.status","responseLatency":"$context.responseLatency"}'
-    cors: true
+    cors: 
+      allowedOrigins: '*'
+      allowedHeaders:
+        - Content-Type
+        - Authorization
+        - X-Api-Key
+      allowedMethods: '*'
 
   # To disable API Gateway creation
   apiGateway:
@@ -33,14 +39,14 @@ provider:
       statements:
         - Effect: Allow
           Action:
-            - "logs:CreateLogGroup"
-            - "logs:CreateLogStream"
-            - "logs:PutLogEvents"
-          Resource: "arn:aws:logs:*:*:*"
+            - 'logs:CreateLogGroup'
+            - 'logs:CreateLogStream'
+            - 'logs:PutLogEvents'
+          Resource: 'arn:aws:logs:*:*:*'
         - Effect: Allow
           Action:
-            - "rds-db:connect"
-          Resource: "*"
+            - 'rds-db:connect'
+          Resource: '*'
 
   logs:
     httpApi: true
@@ -53,19 +59,22 @@ provider:
     DB_PASSWORD: ${self:custom.env.DB_PASSWORD}
     DB_NAME: ${self:custom.env.DB_NAME}
     DB_PORT: ${self:custom.env.DB_PORT}
-    
     PG_ENCRYPT_SECRET: ${self:custom.env.PG_ENCRYPT_SECRET}
+    # AWS_ACCESS_KEY_ID: ${self:custom.env.AWS_ACCESS_KEY_ID}
+    # AWS_SECRET_ACCESS_KEY: ${self:custom.env.AWS_SECRET_ACCESS_KEY}
+    # AWS_REGION: ${self:custom.env.AWS_REGION}
     AWS_SES_SENDER_EMAIL: ${self:custom.env.AWS_SES_SENDER_EMAIL}
     FE_APP_URL: ${self:custom.env.FE_APP_URL}
+    LAMBDA_SG_ID: ${self:custom.env.LAMBDA_SG_ID}
+    SUBNET_IDS: ${self:custom.env.SUBNET_IDS}
 
 package:
   patterns:
-    - '!./**'           # Exclude everything
-    - 'dist/**'         # Include compiled JS
+    - '!./**' # Exclude everything
+    - 'dist/**' # Include compiled JS
     - 'node_modules/**' # Include dependencies
-    - '!node_modules/aws-sdk/**'  # Exclude AWS SDK
+    - '!node_modules/aws-sdk/**' # Exclude AWS SDK
   individually: false
-
 
 plugins:
   - serverless-offline
@@ -80,7 +89,7 @@ functions:
           method: GET
 
   practiceHandlerFunction:
-    timeout: 29 # Max 900 seconds (15 minutes)
+    timeout: 30 # Max 900 seconds (15 minutes)
     handler: dist/handler.practiceHandler
     events:
       - httpApi:
@@ -107,8 +116,12 @@ functions:
           path: /${self:custom.env.API_ROOT_PATH}/practice/accountAdminAvailability
           method: GET
 
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/practice/ownerValidation
+          method: POST
+
   userHandlerFunction:
-    timeout: 29 # Max 900 seconds (15 minutes)
+    timeout: 30 # Max 900 seconds (15 minutes)
     handler: dist/handler.userHandler
     events:
       - httpApi:
@@ -136,7 +149,7 @@ functions:
           method: DELETE
 
   stateHandlerFunction:
-    timeout: 29 # Max 900 seconds (15 minutes)
+    timeout: 30 # Max 900 seconds (15 minutes)
     handler: dist/handler.stateHandler
     events:
       - httpApi:
@@ -144,7 +157,7 @@ functions:
           method: GET
 
   authHandlerFunction:
-    timeout: 29 # Max 900 seconds (15 minutes)
+    timeout: 30 # Max 900 seconds (15 minutes)
     handler: dist/handler.authHandler
     events:
       - httpApi:
@@ -188,7 +201,7 @@ functions:
           method: POST
 
   securityHandlerFunction:
-    timeout: 29 # Max 900 seconds (15 minutes)
+    timeout: 30 # Max 900 seconds (15 minutes)
     handler: dist/handler.securityHandler
     events:
       - httpApi:
@@ -196,7 +209,7 @@ functions:
           method: PUT
 
   patientHandlerFunction:
-    timeout: 29 # Max 900 seconds (15 minutes)
+    timeout: 30 # Max 900 seconds (15 minutes)
     handler: dist/handler.patientHandler
     events:
       - httpApi:
@@ -222,3 +235,47 @@ functions:
       - httpApi:
           path: /${self:custom.env.API_ROOT_PATH}/patient/search
           method: POST
+
+  implantHandlerFunction:
+    timeout: 30 # Max 900 seconds (15 minutes)
+    handler: dist/handler.implantHandler
+    events:
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/implant/dump
+          method: GET
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/implant/manufacturer
+          method: GET
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/implant/type
+          method: GET
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/implant/size
+          method: GET
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/implant/doctor
+          method: GET
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/implant/add
+          method: POST
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/implant/doctor/existance
+          method: POST
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/implant/detail
+          method: POST
+
+  chartHandlerFunction:
+    timeout: 30 # Max 900 seconds (15 minutes)
+    handler: dist/handler.chartHandler
+    events:
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/chart/detail
+          method: GET
