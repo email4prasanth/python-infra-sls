@@ -2,7 +2,7 @@ name : Deploy AWS infrastructure using AWS CDK with the Python SDK
 on:
   push:
     branches:
-      - develop-cicd
+      - develop-sls-cicd
 
 jobs:
   aws-infrastructure:
@@ -205,7 +205,7 @@ jobs:
 # on:
 #   push:
 #     branches:
-#       - develop-cicd
+#       - develop-sls-cicd
 
 # jobs:
 
