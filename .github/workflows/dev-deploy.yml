@@ -1,365 +1,281 @@
-name : Deploy AWS infrastructure using AWS CDK with the Python SDK
-on:
-  push:
-    branches:
-      - develop-sls-cicd
+service: lumifi-lam
 
-jobs:
-  aws-infrastructure:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: infrastructure
-    env:
-      ENVIRONMENT: dev
+frameworkVersion: '>=4.0.0'
 
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+custom:
+  serverless-offline:
+    httpPort: 3001
+  #   dev: ${file(./env.yml):dev}
+  env: ${file(./env.yml):${opt:stage, self:provider.stage, 'dev'}}
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.12
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  timeout: 30 # Max 900 seconds (15 minutes)
+  # Explicitly configure regional API endpoint
+  endpointType: REGIONAL
+  httpApi:
+    shouldStartNameWithService: true
+    accessLogs:
+      format: '{"requestTime":"$context.requestTime","requestId":"$context.requestId","httpMethod":"$context.httpMethod","path":"$context.path","routeKey":"$context.routeKey","status":"$context.status","responseLatency":"$context.responseLatency"}'
+    cors: 
+      allowedOrigins: '*'
+      allowedHeaders:
+        - Content-Type
+        - Authorization
+        - X-Api-Key
+      allowedMethods: '*'
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 22
+  # To disable API Gateway creation
+  apiGateway:
+    disableDefaultEndpoint: false
+    # regional: true
 
-      - name: Instal AWS CDK
-        run: npm install -g aws-cdk
+  iam:
+    role:
+      name: lambda-execution-role-${self:service}-${sls:stage}
+      statements:
+        - Effect: Allow
+          Action:
+            - 'logs:CreateLogGroup'
+            - 'logs:CreateLogStream'
+            - 'logs:PutLogEvents'
+          Resource: 'arn:aws:logs:*:*:*'
+        - Effect: Allow
+          Action:
+            - 'rds-db:connect'
+          Resource: '*'
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+  logs:
+    httpApi: true
 
-      - name: Install Python dependencies
-        # working-directory: infrastructure
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
- 
-      - name: Bootstrap CDK
-        run: cdk bootstrap aws://180294218712/us-east-1
+  environment:
+    API_ROOT_PATH: ${self:custom.env.API_ROOT_PATH}
+    JWT_SECRET: ${self:custom.env.JWT_SECRET}
+    DB_HOST: ${self:custom.env.DB_HOST}
+    DB_USER: ${self:custom.env.DB_USER}
+    DB_PASSWORD: ${self:custom.env.DB_PASSWORD}
+    DB_NAME: ${self:custom.env.DB_NAME}
+    DB_PORT: ${self:custom.env.DB_PORT}
+    PG_ENCRYPT_SECRET: ${self:custom.env.PG_ENCRYPT_SECRET}
+    # AWS_ACCESS_KEY_ID: ${self:custom.env.AWS_ACCESS_KEY_ID}
+    # AWS_SECRET_ACCESS_KEY: ${self:custom.env.AWS_SECRET_ACCESS_KEY}
+    # AWS_REGION: ${self:custom.env.AWS_REGION}
+    AWS_SES_SENDER_EMAIL: ${self:custom.env.AWS_SES_SENDER_EMAIL}
+    FE_APP_URL: ${self:custom.env.FE_APP_URL}
+    LAMBDA_SG_ID: ${self:custom.env.LAMBDA_SG_ID}
+    SUBNET_IDS: ${self:custom.env.SUBNET_IDS}
 
+package:
+  patterns:
+    - '!./**' # Exclude everything
+    - 'dist/**' # Include compiled JS
+    - 'node_modules/**' # Include dependencies
+    - '!node_modules/aws-sdk/**' # Exclude AWS SDK
+  individually: false
 
-      - name: CDK Synth
-        # working-directory: infrastructure
-        run: cdk synth --context env=${{ env.ENVIRONMENT }}
+plugins:
+  - serverless-offline
 
-      - name: CDK Deploy
-        # working-directory: infrastructure
-        run: cdk deploy --all --context env=${{ env.ENVIRONMENT }} --require-approval never
+functions:
+  api:
+    # handler: src/handler.hello
+    handler: dist/handler.hello
+    events:
+      - httpApi:
+          path: /hello
+          method: GET
 
-  deploy-serverless:
-    needs: aws-infrastructure
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backendservice
+  practiceHandlerFunction:
+    timeout: 30 # Max 900 seconds (15 minutes)
+    handler: dist/handler.practiceHandler
+    events:
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/practice/software
+          method: GET
 
-    env:
-      ENVIRONMENT: dev
-      API_ROOT_PATH: api/v1
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/practice/speciality
+          method: GET
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/practice
+          method: GET
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/practice/register
+          method: POST
 
-      - name: Show package.json
-        run: cat package.json
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/practice/update
+          method: PUT
 
-      - name: Install dependencies
-        run: npm install
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/practice/accountAdminAvailability
+          method: GET
 
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/practice/ownerValidation
+          method: POST
 
-      - name: Verify pg package
-        run: |
-          if [ -d "node_modules/pg" ]; then
-            echo "pg package found in node_modules"
-          else
-            echo "Error: pg package not found in node_modules"
-            exit 1
-          fi
+  userHandlerFunction:
+    timeout: 30 # Max 900 seconds (15 minutes)
+    handler: dist/handler.userHandler
+    events:
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/user/role
+          method: GET
 
-      - name: Build TypeScript
-        run: npm run build
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/user/list
+          method: POST
 
-      - name: Verify deployment package
-        run: |
-          echo "Dist contents:"
-          ls -la dist/
-          echo "Node modules:"
-          ls -la node_modules/ | grep pg
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/user/detail
+          method: GET
 
-      - name: Install Serverless Framework
-        run: npm install -g serverless@4.0.0
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/user/create
+          method: POST
 
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/user/update
+          method: PUT
 
-      - name: Retrieve Secrets from AWS Secrets Manager
-        id: get-secrets
-        run: |
-          SECRET_NAME="testpy-${ENVIRONMENT}-db-credentials"
-          echo "Retrieving secrets from: $SECRET_NAME"
-          SECRET_ARN=$(aws secretsmanager describe-secret --secret-id $SECRET_NAME --query ARN --output text)
-          echo "Secret ARN: $SECRET_ARN"
-          
-          # Retrieve secret value
-          SECRET_VALUE=$(aws secretsmanager get-secret-value --secret-id $SECRET_NAME --query SecretString --output text)
-          echo "Raw secret value retrieved"
-          echo "$SECRET_VALUE" > secret.json
-          
-          # Parse values
-          DB_PASSWORD=$(jq -r '.password' secret.json)
-          DB_NAME=$(jq -r '.dbname' secret.json)
-          DB_PORT=$(jq -r '.port' secret.json)
-          DB_HOST=$(jq -r '.host' secret.json)
-          DB_USER=$(jq -r '.username' secret.json)
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/user/delete
+          method: DELETE
 
-          # Log non-sensitive values
-          echo "DB_PASSWORD: $DB_PASSWORD"
-          echo "DB_NAME: $DB_NAME"
-          echo "DB_PORT: $DB_PORT"
-          echo "DB_HOST: $DB_HOST"
-          echo "DB_USER: $DB_USER"
-          
-          # Set environment variables
-          echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
-          echo "DB_NAME=$DB_NAME" >> $GITHUB_ENV
-          echo "DB_PORT=$DB_PORT" >> $GITHUB_ENV
-          echo "DB_HOST=$DB_HOST" >> $GITHUB_ENV
-          echo "DB_USER=$DB_USER" >> $GITHUB_ENV
+  stateHandlerFunction:
+    timeout: 30 # Max 900 seconds (15 minutes)
+    handler: dist/handler.stateHandler
+    events:
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/state/list
+          method: GET
 
-          
-          echo "JWT_SECRET=$JWT_SECRET" >> $GITHUB_ENV
-          echo "PG_ENCRYPT_SECRET=$PG_ENCRYPT_SECRET" >> $GITHUB_ENV
-          
-      - name: Retrieve IDs from Subnet and Security Group  # Fixed step name
-        run: | 
-          LAMBDA_SG_NAME=testpy-${ENVIRONMENT}-sg
-          echo "Retrieving SG ID for: $LAMBDA_SG_NAME"
-          LAMBDA_SG_ID=$(aws ec2 describe-security-groups \
-            --filters Name=group-name,Values=$LAMBDA_SG_NAME \
-            --query "SecurityGroups[0].GroupId" \
-            --output text)
-          echo "Lambda SG ID: $LAMBDA_SG_ID"
-          echo "LAMBDA_SG_ID=$LAMBDA_SG_ID" >> $GITHUB_ENV  # Corrected env setting
+  authHandlerFunction:
+    timeout: 30 # Max 900 seconds (15 minutes)
+    handler: dist/handler.authHandler
+    events:
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/login
+          method: POST
 
-          SUBNET_TAG_NAME=testpy-${ENVIRONMENT}-vpc
-          echo "Retrieving Subnets for: $SUBNET_TAG_NAME"
-          SUBNET_IDS=$(aws ec2 describe-subnets \
-            --filters "Name=tag:Name,Values=$SUBNET_TAG_NAME" \
-            --query "Subnets[*].SubnetId" \
-            --output text | tr '\n' ',' | sed 's/,$//')  # Convert to comma-separated
-          echo "Subnet IDs: $SUBNET_IDS"
-          echo "SUBNET_IDS=$SUBNET_IDS" >> $GITHUB_ENV  # Corrected env setting
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/selectLoginPracticeAccount
+          method: POST
 
-      - name: Create env.yml
-        run: |
-          cat <<EOF > env.yml
-          $ENVIRONMENT:
-            DB_HOST: ${{ env.DB_HOST }}
-            DB_NAME: ${{ env.DB_NAME }}
-            DB_USER: ${{ env.DB_USER }}
-            DB_PASSWORD: ${{ env.DB_PASSWORD }}
-            DB_PORT: ${{ env.DB_PORT }}
-            
-            JWT_SECRET: ${{ secrets.JWT_SECRET }}
-            PG_ENCRYPT_SECRET: ${{ secrets.PG_ENCRYPT_SECRET }}
-            AWS_SES_SENDER_EMAIL: ${{ secrets.AWS_SES_SENDER_EMAIL }}
-            FE_APP_URL: ${{ secrets.FE_APP_URL }}
-            API_ROOT_PATH: ${API_ROOT_PATH}
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/verifyOtp
+          method: POST
 
-            LAMBDA_SG_ID: $LAMBDA_SG_ID
-            SUBNET_IDS: $SUBNET_IDS
-          EOF
-          
-          # Show non-sensitive parts of env.yml
-          echo "env.yml contents (redacted):"
-          grep -v -E 'DB_PASSWORD|JWT_SECRET|PG_ENCRYPT_SECRET' env.yml
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/completion
+          method: POST
 
-      - name: Deploy Serverless App & API Gateway Endpoints
-        run: |
-          export SERVERLESS_LICENSE_KEY=${{ secrets.SERVERLESS_LICENSE_KEY }}
-          sls deploy --stage $ENVIRONMENT
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/resendOtp
+          method: POST
 
-# ########################################################
-# ### Destroy AWS CDK with the Python SDK
-# ########################################################
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/refreshToken
+          method: POST
 
-# name : Destroy AWS infrastructure using AWS CDK with the Python SDK
-# on:
-#   push:
-#     branches:
-#       - develop-sls-cicd
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/me
+          method: POST
 
-# jobs:
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/setPassword
+          method: POST
 
-#   destroy-serverless:
-#     runs-on: ubuntu-latest
-#     defaults:
-#       run:
-#         working-directory: backendservice
-#     env:
-#       ENVIRONMENT: dev
-#       API_ROOT_PATH: api/v1
-#     steps:
-#       - name: Checkout code
-#         uses: actions/checkout@v4
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/forgotPassword
+          method: GET
 
-#       - name: Configure AWS Credentials
-#         uses: aws-actions/configure-aws-credentials@v4
-#         with:
-#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-#           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/resetPassword
+          method: POST
 
-#       - name: Setup Node.js
-#         uses: actions/setup-node@v4
-#         with:
-#           node-version: 18
+  securityHandlerFunction:
+    timeout: 30 # Max 900 seconds (15 minutes)
+    handler: dist/handler.securityHandler
+    events:
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/security/update
+          method: PUT
 
-#       # Install ALL dependencies including devDependencies
-#       - name: Install dependencies
-#         run: npm install
+  patientHandlerFunction:
+    timeout: 30 # Max 900 seconds (15 minutes)
+    handler: dist/handler.patientHandler
+    events:
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/patient/create
+          method: POST
 
-#       - name: Install Serverless Framework
-#         run: npm install -g serverless@4.0.0
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/patient/update
+          method: PUT
 
-#       - name: Retrieve Secrets from AWS Secrets Manager
-#         id: get-secrets
-#         run: |
-#           SECRET_NAME="testpy-dev-db-credentials"
-#           echo "Retrieving secrets from: $SECRET_NAME"
-#           SECRET_ARN=$(aws secretsmanager describe-secret --secret-id $SECRET_NAME --query ARN --output text)
-#           echo "Secret ARN: $SECRET_ARN"
-          
-#           # Retrieve secret value
-#           SECRET_VALUE=$(aws secretsmanager get-secret-value --secret-id $SECRET_NAME --query SecretString --output text)
-#           echo "Raw secret value retrieved"
-#           echo "$SECRET_VALUE" > secret.json
-          
-#           # Parse values
-#           DB_PASSWORD=$(jq -r '.password' secret.json)
-#           DB_NAME=$(jq -r '.dbname' secret.json)
-#           DB_PORT=$(jq -r '.port' secret.json)
-#           DB_HOST=$(jq -r '.host' secret.json)
-#           DB_USER=$(jq -r '.username' secret.json)
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/patient/delete
+          method: DELETE
 
-#           # Log non-sensitive values
-#           echo "DB_PASSWORD: $DB_PASSWORD"
-#           echo "DB_NAME: $DB_NAME"
-#           echo "DB_PORT: $DB_PORT"
-#           echo "DB_HOST: $DB_HOST"
-#           echo "DB_USER: $DB_USER"
-          
-#           # Set environment variables
-#           echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
-#           echo "DB_NAME=$DB_NAME" >> $GITHUB_ENV
-#           echo "DB_PORT=$DB_PORT" >> $GITHUB_ENV
-#           echo "DB_HOST=$DB_HOST" >> $GITHUB_ENV
-#           echo "DB_USER=$DB_USER" >> $GITHUB_ENV
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/patient/detail
+          method: GET
 
-          
-#           echo "JWT_SECRET=$JWT_SECRET" >> $GITHUB_ENV
-#           echo "PG_ENCRYPT_SECRET=$PG_ENCRYPT_SECRET" >> $GITHUB_ENV
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/patient/list
+          method: POST
 
-#       - name: Create env.yml
-#         run: |
-#           cat <<EOF > env.yml
-#           $ENVIRONMENT:
-#             DB_HOST: ${{ env.DB_HOST }}
-#             DB_NAME: ${{ env.DB_NAME }}
-#             DB_USER: ${{ env.DB_USER }}
-#             DB_PASSWORD: ${{ env.DB_PASSWORD }}
-#             DB_PORT: ${{ env.DB_PORT }}
-            
-#             JWT_SECRET: ${{ secrets.JWT_SECRET }}
-#             PG_ENCRYPT_SECRET: ${{ secrets.PG_ENCRYPT_SECRET }}
-#             AWS_SES_SENDER_EMAIL: ${{ secrets.AWS_SES_SENDER_EMAIL }}
-#             FE_APP_URL: ${{ secrets.FE_APP_URL }}
-#             API_ROOT_PATH: ${API_ROOT_PATH}
-#           EOF
-          
-#           # Show non-sensitive parts of env.yml
-#           echo "env.yml contents (redacted):"
-#           grep -v -E 'DB_PASSWORD|JWT_SECRET|PG_ENCRYPT_SECRET' env.yml
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/patient/search
+          method: POST
 
-#       - name: Destroy Serverless App
-#         run: |
-#           export SERVERLESS_LICENSE_KEY=${{ secrets.SERVERLESS_LICENSE_KEY }}
-#           sls remove --stage $ENVIRONMENT
+  implantHandlerFunction:
+    timeout: 30 # Max 900 seconds (15 minutes)
+    handler: dist/handler.implantHandler
+    events:
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/implant/dump
+          method: GET
 
-#   aws-infra-destroy:
-#     needs: destroy-serverless
-#     runs-on: ubuntu-latest
-#     defaults:
-#       run:
-#         working-directory: infrastructure
-#     env:
-#       ENVIRONMENT: dev
-#     steps:
-#       - name: Checkout Repository
-#         uses: actions/checkout@v4
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/implant/manufacturer
+          method: GET
 
-#       - name: Set up Python
-#         uses: actions/setup-python@v4
-#         with:
-#           python-version: 3.12
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/implant/type
+          method: GET
 
-#       - name: Set up Node.js
-#         uses: actions/setup-node@v3
-#         with:
-#           node-version: 22
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/implant/size
+          method: GET
 
-#       - name: Instal AWS CDK
-#         run: npm install -g aws-cdk
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/implant/doctor
+          method: GET
 
-#       - name: Configure AWS Credentials
-#         uses: aws-actions/configure-aws-credentials@v4
-#         with:
-#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-#           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/implant/add
+          method: POST
 
-#       - name: Install Python dependencies
-#         run: |
-#           python -m pip install --upgrade pip
-#           pip install -r requirements.txt
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/implant/doctor/existance
+          method: POST
 
-#       - name: CDK Destroy Infrastructure
-#         run: |
-#           cdk destroy --all --force --context env=${{ env.ENVIRONMENT }}
-#           echo "Infrastructure destroyed successfully"
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/implant/detail
+          method: POST
 
-#       - name: Destroy CDK Bootstrap Stack
-#         run: |
-#           # Check if stack exists
-#           if aws cloudformation describe-stacks --stack-name CDKToolkit &>/dev/null; then
-#             echo "Destroying CDK bootstrap stack"
-#             aws cloudformation delete-stack --stack-name CDKToolkit
-#             aws cloudformation wait stack-delete-complete --stack-name CDKToolkit
-#           else
-#             echo "CDK bootstrap stack not found"
-#           fi
-
-#       - name: Remove S3 bucket
-#         run: |
-#           cd ..
-#           ls -al
-#           bash ./z-del-s3.sh
+  chartHandlerFunction:
+    timeout: 30 # Max 900 seconds (15 minutes)
+    handler: dist/handler.chartHandler
+    events:
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/chart/detail
+          method: GET
