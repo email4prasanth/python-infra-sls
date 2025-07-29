@@ -1,0 +1,364 @@
+name : Deploy AWS infrastructure using AWS CDK with the Python SDK
+on:
+  push:
+    branches:
+      - develop-sls-cicd
+
+jobs:
+  aws-infrastructure:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infrastructure
+    env:
+      ENVIRONMENT: dev
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.12
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 22
+
+      - name: Instal AWS CDK
+        run: npm install -g aws-cdk
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Install Python dependencies
+        # working-directory: infrastructure
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+ 
+      - name: Bootstrap CDK
+        run: cdk bootstrap aws://180294218712/us-east-1
+
+
+      - name: CDK Synth
+        # working-directory: infrastructure
+        run: cdk synth --context env=${{ env.ENVIRONMENT }}
+
+      - name: CDK Deploy
+        # working-directory: infrastructure
+        run: cdk deploy --all --context env=${{ env.ENVIRONMENT }} --require-approval never
+
+  deploy-serverless:
+    needs: aws-infrastructure
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backendservice
+
+    env:
+      ENVIRONMENT: dev
+      API_ROOT_PATH: api/v1
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Show package.json
+        run: cat package.json
+
+      - name: Install dependencies
+        run: npm install
+
+
+      - name: Verify pg package
+        run: |
+          if [ -d "node_modules/pg" ]; then
+            echo "pg package found in node_modules"
+          else
+            echo "Error: pg package not found in node_modules"
+            exit 1
+          fi
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Verify deployment package
+        run: |
+          echo "Dist contents:"
+          ls -la dist/
+          echo "Node modules:"
+          ls -la node_modules/ | grep pg
+
+      - name: Install Serverless Framework
+        run: npm install -g serverless@4.0.0
+
+
+      - name: Retrieve Secrets from AWS Secrets Manager
+        id: get-secrets
+        run: |
+          SECRET_NAME="testpy-${ENVIRONMENT}-db-credentials"
+          echo "Retrieving secrets from: $SECRET_NAME"
+          SECRET_ARN=$(aws secretsmanager describe-secret --secret-id $SECRET_NAME --query ARN --output text)
+          echo "Secret ARN: $SECRET_ARN"
+          
+          # Retrieve secret value
+          SECRET_VALUE=$(aws secretsmanager get-secret-value --secret-id $SECRET_NAME --query SecretString --output text)
+          echo "Raw secret value retrieved"
+          echo "$SECRET_VALUE" > secret.json
+          
+          # Parse values
+          DB_PASSWORD=$(jq -r '.password' secret.json)
+          DB_NAME=$(jq -r '.dbname' secret.json)
+          DB_PORT=$(jq -r '.port' secret.json)
+          DB_HOST=$(jq -r '.host' secret.json)
+          DB_USER=$(jq -r '.username' secret.json)
+
+          # Log non-sensitive values
+          echo "DB_PASSWORD: $DB_PASSWORD"
+          echo "DB_NAME: $DB_NAME"
+          echo "DB_PORT: $DB_PORT"
+          echo "DB_HOST: $DB_HOST"
+          echo "DB_USER: $DB_USER"
+          
+          # Set environment variables
+          echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
+          echo "DB_NAME=$DB_NAME" >> $GITHUB_ENV
+          echo "DB_PORT=$DB_PORT" >> $GITHUB_ENV
+          echo "DB_HOST=$DB_HOST" >> $GITHUB_ENV
+          echo "DB_USER=$DB_USER" >> $GITHUB_ENV
+
+          
+          echo "JWT_SECRET=$JWT_SECRET" >> $GITHUB_ENV
+          echo "PG_ENCRYPT_SECRET=$PG_ENCRYPT_SECRET" >> $GITHUB_ENV
+      - name: Retrive IDs from Subnet and Security Group
+        run: | 
+          LAMBDA_SG_NAME=testpy-${ENVIRONMENT}-sg
+          echo "Retrieving SG ID for: $LAMBDA_SG_NAME"
+          LAMBDA_SG_ID=$(aws ec2 describe-security-groups \
+            --filters Name=group-name,Values=$LAMBDA_SG_NAME \
+            --query "SecurityGroups[0].GroupId" \
+            --output text)
+          echo "Lambda sg: LAMBDA_SG_ID"
+          echo "LAMBDA_SG_ID" >> $GITHUB_ENV
+
+          SUBNET_TAG_NAME=testpy-${ENVIRONMENT}-vpc
+          echo "Retrieving secrets from: $SUBNET_TAG_NAME"
+          SUBNET_IDS=$(aws ec2 describe-subnets \
+            --filters "Name=tag:Name,Values=$SUBNET_TAG_NAME" \
+            --query "Subnets[*].SubnetId" \
+            --output text
+          echo "Subnet IDs: SUBNET_IDS"
+          echo "SUBNET_IDS" >> $GITHUB_ENV
+
+      - name: Create env.yml
+        run: |
+          cat <<EOF > env.yml
+          $ENVIRONMENT:
+            DB_HOST: ${{ env.DB_HOST }}
+            DB_NAME: ${{ env.DB_NAME }}
+            DB_USER: ${{ env.DB_USER }}
+            DB_PASSWORD: ${{ env.DB_PASSWORD }}
+            DB_PORT: ${{ env.DB_PORT }}
+            
+            JWT_SECRET: ${{ secrets.JWT_SECRET }}
+            PG_ENCRYPT_SECRET: ${{ secrets.PG_ENCRYPT_SECRET }}
+            AWS_SES_SENDER_EMAIL: ${{ secrets.AWS_SES_SENDER_EMAIL }}
+            FE_APP_URL: ${{ secrets.FE_APP_URL }}
+            API_ROOT_PATH: ${API_ROOT_PATH}
+
+            LAMBDA_SG_ID: $LAMBDA_SG_ID
+            SUBNET_IDS: $SUBNET_IDS
+          EOF
+          
+          # Show non-sensitive parts of env.yml
+          echo "env.yml contents (redacted):"
+          grep -v -E 'DB_PASSWORD|JWT_SECRET|PG_ENCRYPT_SECRET' env.yml
+
+      - name: Deploy Serverless App & API Gateway Endpoints
+        run: |
+          export SERVERLESS_LICENSE_KEY=${{ secrets.SERVERLESS_LICENSE_KEY }}
+          sls deploy --stage $ENVIRONMENT
+
+# ########################################################
+# ### Destroy AWS CDK with the Python SDK
+# ########################################################
+
+# name : Destroy AWS infrastructure using AWS CDK with the Python SDK
+# on:
+#   push:
+#     branches:
+#       - develop-sls-cicd
+
+# jobs:
+
+#   destroy-serverless:
+#     runs-on: ubuntu-latest
+#     defaults:
+#       run:
+#         working-directory: backendservice
+#     env:
+#       ENVIRONMENT: dev
+#       API_ROOT_PATH: api/v1
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+
+#       - name: Configure AWS Credentials
+#         uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v4
+#         with:
+#           node-version: 18
+
+#       # Install ALL dependencies including devDependencies
+#       - name: Install dependencies
+#         run: npm install
+
+#       - name: Install Serverless Framework
+#         run: npm install -g serverless@4.0.0
+
+#       - name: Retrieve Secrets from AWS Secrets Manager
+#         id: get-secrets
+#         run: |
+#           SECRET_NAME="testpy-dev-db-credentials"
+#           echo "Retrieving secrets from: $SECRET_NAME"
+#           SECRET_ARN=$(aws secretsmanager describe-secret --secret-id $SECRET_NAME --query ARN --output text)
+#           echo "Secret ARN: $SECRET_ARN"
+          
+#           # Retrieve secret value
+#           SECRET_VALUE=$(aws secretsmanager get-secret-value --secret-id $SECRET_NAME --query SecretString --output text)
+#           echo "Raw secret value retrieved"
+#           echo "$SECRET_VALUE" > secret.json
+          
+#           # Parse values
+#           DB_PASSWORD=$(jq -r '.password' secret.json)
+#           DB_NAME=$(jq -r '.dbname' secret.json)
+#           DB_PORT=$(jq -r '.port' secret.json)
+#           DB_HOST=$(jq -r '.host' secret.json)
+#           DB_USER=$(jq -r '.username' secret.json)
+
+#           # Log non-sensitive values
+#           echo "DB_PASSWORD: $DB_PASSWORD"
+#           echo "DB_NAME: $DB_NAME"
+#           echo "DB_PORT: $DB_PORT"
+#           echo "DB_HOST: $DB_HOST"
+#           echo "DB_USER: $DB_USER"
+          
+#           # Set environment variables
+#           echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
+#           echo "DB_NAME=$DB_NAME" >> $GITHUB_ENV
+#           echo "DB_PORT=$DB_PORT" >> $GITHUB_ENV
+#           echo "DB_HOST=$DB_HOST" >> $GITHUB_ENV
+#           echo "DB_USER=$DB_USER" >> $GITHUB_ENV
+
+          
+#           echo "JWT_SECRET=$JWT_SECRET" >> $GITHUB_ENV
+#           echo "PG_ENCRYPT_SECRET=$PG_ENCRYPT_SECRET" >> $GITHUB_ENV
+
+#       - name: Create env.yml
+#         run: |
+#           cat <<EOF > env.yml
+#           $ENVIRONMENT:
+#             DB_HOST: ${{ env.DB_HOST }}
+#             DB_NAME: ${{ env.DB_NAME }}
+#             DB_USER: ${{ env.DB_USER }}
+#             DB_PASSWORD: ${{ env.DB_PASSWORD }}
+#             DB_PORT: ${{ env.DB_PORT }}
+            
+#             JWT_SECRET: ${{ secrets.JWT_SECRET }}
+#             PG_ENCRYPT_SECRET: ${{ secrets.PG_ENCRYPT_SECRET }}
+#             AWS_SES_SENDER_EMAIL: ${{ secrets.AWS_SES_SENDER_EMAIL }}
+#             FE_APP_URL: ${{ secrets.FE_APP_URL }}
+#             API_ROOT_PATH: ${API_ROOT_PATH}
+#           EOF
+          
+#           # Show non-sensitive parts of env.yml
+#           echo "env.yml contents (redacted):"
+#           grep -v -E 'DB_PASSWORD|JWT_SECRET|PG_ENCRYPT_SECRET' env.yml
+
+#       - name: Destroy Serverless App
+#         run: |
+#           export SERVERLESS_LICENSE_KEY=${{ secrets.SERVERLESS_LICENSE_KEY }}
+#           sls remove --stage $ENVIRONMENT
+
+#   aws-infra-destroy:
+#     needs: destroy-serverless
+#     runs-on: ubuntu-latest
+#     defaults:
+#       run:
+#         working-directory: infrastructure
+#     env:
+#       ENVIRONMENT: dev
+#     steps:
+#       - name: Checkout Repository
+#         uses: actions/checkout@v4
+
+#       - name: Set up Python
+#         uses: actions/setup-python@v4
+#         with:
+#           python-version: 3.12
+
+#       - name: Set up Node.js
+#         uses: actions/setup-node@v3
+#         with:
+#           node-version: 22
+
+#       - name: Instal AWS CDK
+#         run: npm install -g aws-cdk
+
+#       - name: Configure AWS Credentials
+#         uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+#       - name: Install Python dependencies
+#         run: |
+#           python -m pip install --upgrade pip
+#           pip install -r requirements.txt
+
+#       - name: CDK Destroy Infrastructure
+#         run: |
+#           cdk destroy --all --force --context env=${{ env.ENVIRONMENT }}
+#           echo "Infrastructure destroyed successfully"
+
+#       - name: Destroy CDK Bootstrap Stack
+#         run: |
+#           # Check if stack exists
+#           if aws cloudformation describe-stacks --stack-name CDKToolkit &>/dev/null; then
+#             echo "Destroying CDK bootstrap stack"
+#             aws cloudformation delete-stack --stack-name CDKToolkit
+#             aws cloudformation wait stack-delete-complete --stack-name CDKToolkit
+#           else
+#             echo "CDK bootstrap stack not found"
+#           fi
+
+#       - name: Remove S3 bucket
+#         run: |
+#           cd ..
+#           ls -al
+#           bash ./z-del-s3.sh

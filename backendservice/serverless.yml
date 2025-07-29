@@ -1,0 +1,224 @@
+service: lumifi-sls
+
+frameworkVersion: '>=4.0.0'
+
+custom:
+  serverless-offline:
+    httpPort: 3001
+#   dev: ${file(./env.yml):dev}
+  env: ${file(./env.yml):${opt:stage, self:provider.stage, 'dev'}}
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  timeout: 29 # Max 900 seconds (15 minutes)
+  # Explicitly configure regional API endpoint
+  endpointType: REGIONAL
+  httpApi:
+    shouldStartNameWithService: true 
+    accessLogs:
+      format: '{"requestTime":"$context.requestTime","requestId":"$context.requestId","httpMethod":"$context.httpMethod","path":"$context.path","routeKey":"$context.routeKey","status":"$context.status","responseLatency":"$context.responseLatency"}'
+    cors: true
+
+  # To disable API Gateway creation
+  apiGateway:
+    disableDefaultEndpoint: false
+    # regional: true
+
+  iam:
+    role:
+      name: lambda-execution-role-${self:service}-${sls:stage}
+      statements:
+        - Effect: Allow
+          Action:
+            - "logs:CreateLogGroup"
+            - "logs:CreateLogStream"
+            - "logs:PutLogEvents"
+          Resource: "arn:aws:logs:*:*:*"
+        - Effect: Allow
+          Action:
+            - "rds-db:connect"
+          Resource: "*"
+
+  logs:
+    httpApi: true
+
+  environment:
+    API_ROOT_PATH: ${self:custom.env.API_ROOT_PATH}
+    JWT_SECRET: ${self:custom.env.JWT_SECRET}
+    DB_HOST: ${self:custom.env.DB_HOST}
+    DB_USER: ${self:custom.env.DB_USER}
+    DB_PASSWORD: ${self:custom.env.DB_PASSWORD}
+    DB_NAME: ${self:custom.env.DB_NAME}
+    DB_PORT: ${self:custom.env.DB_PORT}
+    
+    PG_ENCRYPT_SECRET: ${self:custom.env.PG_ENCRYPT_SECRET}
+    AWS_SES_SENDER_EMAIL: ${self:custom.env.AWS_SES_SENDER_EMAIL}
+    FE_APP_URL: ${self:custom.env.FE_APP_URL}
+
+package:
+  patterns:
+    - '!./**'           # Exclude everything
+    - 'dist/**'         # Include compiled JS
+    - 'node_modules/**' # Include dependencies
+    - '!node_modules/aws-sdk/**'  # Exclude AWS SDK
+  individually: false
+
+
+plugins:
+  - serverless-offline
+
+functions:
+  api:
+    # handler: src/handler.hello
+    handler: dist/handler.hello
+    events:
+      - httpApi:
+          path: /hello
+          method: GET
+
+  practiceHandlerFunction:
+    timeout: 29 # Max 900 seconds (15 minutes)
+    handler: dist/handler.practiceHandler
+    events:
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/practice/software
+          method: GET
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/practice/speciality
+          method: GET
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/practice
+          method: GET
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/practice/register
+          method: POST
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/practice/update
+          method: PUT
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/practice/accountAdminAvailability
+          method: GET
+
+  userHandlerFunction:
+    timeout: 29 # Max 900 seconds (15 minutes)
+    handler: dist/handler.userHandler
+    events:
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/user/role
+          method: GET
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/user/list
+          method: POST
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/user/detail
+          method: GET
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/user/create
+          method: POST
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/user/update
+          method: PUT
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/user/delete
+          method: DELETE
+
+  stateHandlerFunction:
+    timeout: 29 # Max 900 seconds (15 minutes)
+    handler: dist/handler.stateHandler
+    events:
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/state/list
+          method: GET
+
+  authHandlerFunction:
+    timeout: 29 # Max 900 seconds (15 minutes)
+    handler: dist/handler.authHandler
+    events:
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/login
+          method: POST
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/selectLoginPracticeAccount
+          method: POST
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/verifyOtp
+          method: POST
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/completion
+          method: POST
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/resendOtp
+          method: POST
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/refreshToken
+          method: POST
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/me
+          method: POST
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/setPassword
+          method: POST
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/forgotPassword
+          method: GET
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/auth/resetPassword
+          method: POST
+
+  securityHandlerFunction:
+    timeout: 29 # Max 900 seconds (15 minutes)
+    handler: dist/handler.securityHandler
+    events:
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/security/update
+          method: PUT
+
+  patientHandlerFunction:
+    timeout: 29 # Max 900 seconds (15 minutes)
+    handler: dist/handler.patientHandler
+    events:
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/patient/create
+          method: POST
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/patient/update
+          method: PUT
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/patient/delete
+          method: DELETE
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/patient/detail
+          method: GET
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/patient/list
+          method: POST
+
+      - httpApi:
+          path: /${self:custom.env.API_ROOT_PATH}/patient/search
+          method: POST
