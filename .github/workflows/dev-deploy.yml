@@ -151,21 +151,15 @@ jobs:
 
       - name: Retrieve IDs from Subnet and Security Group  # Fixed step name
         run: | 
-          LAMBDA_SG_NAME=testpy-${ENVIRONMENT}-sg
+          LAMBDA_SG_NAME=testpy-${ENVIRONMENT}-RDSSG
           echo "Retrieving SG ID for: $LAMBDA_SG_NAME"
-          LAMBDA_SG_ID=$(aws ec2 describe-security-groups \
-            --filters Name=group-name,Values=$LAMBDA_SG_NAME \
-            --query "SecurityGroups[0].GroupId" \
-            --output text)
+          LAMBDA_SG_ID=$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=LAMBDA_SG_NAME" --query "SecurityGroups[*].GroupId" --output text)
           echo "Lambda SG ID: $LAMBDA_SG_ID"
           echo "LAMBDA_SG_ID=$LAMBDA_SG_ID" >> $GITHUB_ENV  # Corrected env setting
 
           SUBNET_TAG_NAME=testpy-${ENVIRONMENT}-vpc
           echo "Retrieving Subnets for: $SUBNET_TAG_NAME"
-          SUBNET_IDS=$(aws ec2 describe-subnets \
-            --filters "Name=tag:Name,Values=$SUBNET_TAG_NAME" \
-            --query "Subnets[*].SubnetId" \
-            --output text | tr '\n' ',' | sed 's/,$//')  # Convert to comma-separated
+          SUBNET_IDS=$(aws ec2 describe-subnets  --filters "Name=tag:Name,Values=testpy-dev-*" --query "Subnets[*].SubnetId" --output text  --profile tut  --region us-east-1 | tr '\t' ',' )
           echo "Subnet IDs: $SUBNET_IDS"
           echo "SUBNET_IDS=$SUBNET_IDS" >> $GITHUB_ENV  # Corrected env setting
 
