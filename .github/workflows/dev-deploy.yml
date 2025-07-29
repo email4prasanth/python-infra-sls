@@ -157,7 +157,7 @@ jobs:
           echo "Lambda SG ID: $LAMBDA_SG_ID"
           echo "LAMBDA_SG_ID=$LAMBDA_SG_ID" >> $GITHUB_ENV  # Corrected env setting
 
-          SUBNET_TAG_NAME=testpy-${ENVIRONMENT}-vpc
+          SUBNET_TAG_NAME=testpy-${ENVIRONMENT}-*
           echo "Retrieving Subnets for: $SUBNET_TAG_NAME"
           SUBNET_IDS=$(aws ec2 describe-subnets  --filters "Name=tag:Name,Values=$SUBNET_TAG_NAME" --query "Subnets[*].SubnetId" --output text  --profile tut  --region us-east-1 | tr '\t' ',' )
           echo "Subnet IDs: $SUBNET_IDS"
