@@ -53,22 +53,22 @@ class RDSStack(Stack):
             db_name = f"a{db_name}"
 
         # Create RDS Security Group
-        # rds_sg = ec2.CfnSecurityGroup(
-        #     self,
-        #     f"{prefix}-RDSSG",
-        #     group_description=f"{prefix} RDS Security Group",
-        #     vpc_id=vpc.ref,
-        #     security_group_ingress=[
-        #         {
-        #             "ipProtocol": "tcp",
-        #             "fromPort": config.RDS_PORT,
-        #             "toPort": config.RDS_PORT,
-        #             "sourceSecurityGroupId": web_security_group.attr_group_id,
-        #             "description": "Allow from web servers"
-        #         }
-        #     ],
-        #     tags=[{"key": "Name", "value": f"{prefix}-RDSSG"}]
-        # )
+        rds_sg = ec2.CfnSecurityGroup(
+            self,
+            f"{prefix}-RDS-SG",
+            group_description=f"{prefix} RDS Security Group",
+            vpc_id=vpc.ref,
+            security_group_ingress=[
+                {
+                    "ipProtocol": "tcp",
+                    "fromPort": config.RDS_PORT,
+                    "toPort": config.RDS_PORT,
+                    "sourceSecurityGroupId": web_security_group.attr_group_id,
+                    "description": "Allow from web servers"
+                }
+            ],
+            tags=[{"key": "Name", "value": f"{prefix}-RDS-SG"}]
+        )
         
         # Create PostgreSQL instance
         db_instance = rds.CfnDBInstance(
