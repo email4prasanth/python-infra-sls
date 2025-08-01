@@ -41,7 +41,8 @@ class RDSStack(Stack):
                  public_subnets: List[ec2.CfnSubnet],
                  web_security_group: ec2.CfnSecurityGroup,
                  rds_security_group: ec2.CfnSecurityGroup,
-                 db_secret,  # Secret passed from SecretsStack
+                 db_secret, # Secret passed from SecretsStack
+                 lambda_role: iam.Role,  
                  **kwargs):
         super().__init__(scope, construct_id, **kwargs)
         config = self.load_config(environment)
@@ -133,12 +134,13 @@ def handler(event, context):
                 "DB_ENDPOINT": db_instance.attr_endpoint_address,
                 "DB_PORT": str(db_instance.attr_endpoint_port)
             },
-            timeout=Duration.seconds(30)
+            timeout=Duration.seconds(30),
+            role=lambda_role
         )
         
-        # Grant Lambda permission to update the secret
-        db_secret.grant_read(update_secret_lambda)
-        db_secret.grant_write(update_secret_lambda)
+        # # Grant Lambda permission to update the secret
+        # db_secret.grant_read(update_secret_lambda)
+        # db_secret.grant_write(update_secret_lambda)
         
         # Create custom resource to trigger Lambda after RDS creation
         trigger = cr.AwsCustomResource(

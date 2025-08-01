@@ -5,8 +5,9 @@ import aws_cdk as cdk
 
 from infrastructure.vpc_stack import VPCStack
 from infrastructure.security_group import SecurityGroupStack
-from infrastructure.rds_stack import RDSStack 
+from infrastructure.rds_stack import RDSStack
 from infrastructure.secrets_stack import SecretsStack
+from infrastructure.iam_stack import IAMStack
 
 
 app = cdk.App()
@@ -36,6 +37,14 @@ secrets_stack = SecretsStack(
     env=cdk.Environment(account='180294218712', region='us-east-1')
 )
 
+# Create IAM stack
+iam_stack = IAMStack(  # Add this stack
+    app,
+    f"IAMStack-{env_name}",
+    environment=env_name,
+    env=cdk.Environment(account='180294218712', region='us-east-1')
+)
+
 # Create RDS stack
 rds_stack = RDSStack(
     app,
@@ -46,6 +55,7 @@ rds_stack = RDSStack(
     web_security_group=sg_stack.web_sg,
     rds_security_group=sg_stack.rds_sg,
     db_secret=secrets_stack.db_secret,
+    lambda_role=iam_stack.lambda_role,
     env=cdk.Environment(account='180294218712', region='us-east-1')
 )
 
@@ -54,5 +64,6 @@ sg_stack.add_dependency(vpc_stack)
 # RDS depends on Security Group
 rds_stack.add_dependency(sg_stack)
 rds_stack.add_dependency(secrets_stack)
+rds_stack.add_dependency(iam_stack) 
 
 app.synth()
