@@ -53,28 +53,29 @@ class RDSStack(Stack):
         if not db_name[0].isalpha():
             db_name = f"a{db_name}"
 
-        # Create RDS Security Group
-        rds_sg = ec2.CfnSecurityGroup(
-            self,
-            f"{prefix}-RDSSG",
-            group_description=f"{prefix} RDS Security Group",
-            vpc_id=vpc.ref,
-            security_group_ingress=[
-                {
-                    "ipProtocol": "tcp",
-                    "fromPort": config.RDS_PORT,
-                    "toPort": config.RDS_PORT,
-                    "sourceSecurityGroupId": web_security_group.attr_group_id,
-                    "description": "Allow from web servers"
-                }
-            ],
-            tags=[{"key": "Name", "value": f"{prefix}-RDSSG"}]
-        )
+        # # Create RDS Security Group
+        # rds_sg = ec2.CfnSecurityGroup(
+        #     self,
+        #     f"{prefix}-RDSSG",
+        #     group_description=f"{prefix} RDS Security Group",
+        #     vpc_id=vpc.ref,
+        #     security_group_ingress=[
+        #         {
+        #             "ipProtocol": "tcp",
+        #             "fromPort": config.RDS_PORT,
+        #             "toPort": config.RDS_PORT,
+        #             "sourceSecurityGroupId": web_security_group.attr_group_id,
+        #             "description": "Allow from web servers"
+        #         }
+        #     ],
+        #     tags=[{"key": "Name", "value": f"{prefix}-RDSSG"}]
+        # )
         
         # Create PostgreSQL instance
         db_instance = rds.CfnDBInstance(
             self,
             f"{prefix}-PostgreSQL",
+            db_instance_identifier=f"{prefix}-postgres",
             engine="postgres",
             engine_version=config.RDS_ENGINE_VERSION,
             db_instance_class=config.RDS_INSTANCE_TYPE,
@@ -96,6 +97,7 @@ class RDSStack(Stack):
         update_secret_lambda = lambda_.Function(
             self,
             "UpdateSecretLambda",
+            function_name=f"{prefix}-update-secret", ## added line
             runtime=lambda_.Runtime.PYTHON_3_9,
             handler="index.handler",
             code=lambda_.Code.from_inline("""

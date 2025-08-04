@@ -43,7 +43,7 @@ pip install -r requirements.txt
 python -m pip show aws-cdk-lib
 python -m pip show constructs
 cdk synth -c env=dev --profile tut --region us-east-1
-cdk deploy --all --profile tut -c env=dev
+cdk deploy --all --profile tut -c env=dev --require-approval never
 cdk destroy --all --profile tut -c env=dev --force
 aws cloudformation delete-stack --stack-name CDKToolkit --profile tut
 deactivate
